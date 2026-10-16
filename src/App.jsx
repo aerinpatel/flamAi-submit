@@ -1,14 +1,13 @@
 ﻿import { Routes, Route } from 'react-router-dom'
+import RootLayout from './layouts/RootLayout'
+import HomePage from './pages/HomePage'
 
 export default function App() {
   return (
-    <div className="wrap">
-      <main className="view">
-        <header className="hero">
-          <h1>Cravings..</h1>
-          <p>Tell us what's in your kitchen. We'll suggest dishes you can cook right now.</p>
-        </header>
-      </main>
-    </div>
+    <Routes>
+      <Route element={<RootLayout />}>
+        <Route index element={<HomePage />} />
+      </Route>
+    </Routes>
   )
 }
