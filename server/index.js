@@ -35,5 +35,10 @@ app.use((err, _req, res, _next) => {
   })
 })
 
-const port = process.env.PORT || 8787
-app.listen(port, () => console.log(`API listening on http://localhost:${port}`))
+// Locally we start our own server; on Vercel the app is exported and run as a serverless function (see api/index.js).
+if (!process.env.VERCEL) {
+  const port = process.env.PORT || 8787
+  app.listen(port, () => console.log(`API listening on http://localhost:${port}`))
+}
+
+export default app
