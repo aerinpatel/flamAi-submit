@@ -1,5 +1,5 @@
 ﻿import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { callApi, newRequestId, parseSuggest } from '../lib/api.js'
+import { callApi, newRequestId, parseSuggest, parseRecipe } from '../lib/api.js'
 import { MAX_DISHES } from '../../shared/constants.js'
 
 const SUGGEST_TIMEOUT_MS = 20000
@@ -88,15 +88,77 @@ function useSuggestions() {
   }
 }
 
+const RECIPE_TIMEOUT_MS = 32000
+
+const withIds = (r) => ({
+  ...r,
+  ingredients: r.ingredients.map((x, i) => ({ ...x, id: `ing-${i}` })),
+  steps: r.steps.map((x, i) => ({ ...x, id: `step-${i}` })),
+})
+
+function useRecipe() {
+  const [recipe, setRecipe] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [completedSteps, setCompletedSteps] = useState(() => new Set())
+  const latestIdRef = useRef('')
+  const controllerRef = useRef(null)
+
+  useEffect(() => () => controllerRef.current?.abort(), [])
+
+  const fetchRecipe = async (dish, ingredients) => {
+    controllerRef.current?.abort()
+    const requestId = newRequestId()
+    latestIdRef.current = requestId
+    controllerRef.current = new AbortController()
+
+    setIsLoading(true)
+    setError(null)
+    setRecipe(null)
+    setCompletedSteps(new Set())
+
+    const result = await callApi({
+      url: '/api/recipe',
+      body: { dishName: dish.name, description: dish.description, ingredients },
+      requestId,
+      parse: parseRecipe,
+      timeoutMs: RECIPE_TIMEOUT_MS,
+      signal: controllerRef.current.signal,
+    })
+    if (latestIdRef.current !== requestId) return
+
+    setIsLoading(false)
+    if (!result.ok) { setError(result.error); return }
+    setRecipe(withIds(result.data.recipe))
+  }
+
+  const toggleStep = (stepId) => {
+    setCompletedSteps((prev) => {
+      const next = new Set(prev)
+      if (next.has(stepId)) next.delete(stepId)
+      else next.add(stepId)
+      return next
+    })
+  }
+
+  return { recipe, isLoading, error, completedSteps, toggleStep, fetchRecipe }
+}
+
 export const suggestionsKey = (names) => names.join('|').toLowerCase()
+export const recipeKeyFor = (dish, names) => [dish.id, dish.name, ...names].join('|').toLowerCase()
 
 const Ctx = createContext(null)
 
 export function RecipeFlowProvider({ children }) {
   const suggestions = useSuggestions()
+  const recipe = useRecipe()
   const { getSuggestions, loadMore } = suggestions
+  const { fetchRecipe } = recipe
+
   const [suggestKey, setSuggestKey] = useState('')
+  const [recipeKey, setRecipeKey] = useState('')
   const suggestKeyRef = useRef('')
+  const recipeKeyRef = useRef('')
 
   const loadSuggestions = (names, { force = false } = {}) => {
     const key = suggestionsKey(names)
@@ -106,7 +168,15 @@ export function RecipeFlowProvider({ children }) {
     getSuggestions(names)
   }
 
-  const value = { suggestions, suggestKey, loadSuggestions, loadMoreSuggestions: loadMore }
+  const loadRecipe = (dish, names, { force = false } = {}) => {
+    const key = recipeKeyFor(dish, names)
+    if (!force && key === recipeKeyRef.current) return
+    recipeKeyRef.current = key
+    setRecipeKey(key)
+    fetchRecipe(dish, names)
+  }
+
+  const value = { suggestions, recipe, suggestKey, recipeKey, loadSuggestions, loadMoreSuggestions: loadMore, loadRecipe }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 

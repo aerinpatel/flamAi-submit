@@ -1,4 +1,5 @@
 ﻿import { z } from 'zod'
+import { MIN_STEPS, MAX_STEPS } from '../../shared/constants.js'
 
 function normalizeDifficulty(val) {
   const lower = String(val ?? '').toLowerCase().trim()
@@ -17,6 +18,13 @@ function firstGrapheme(s) {
 }
 const EmojiSchema = z.string().trim().min(1).transform(firstGrapheme)
 
+const NullableText = z
+  .string()
+  .nullable()
+  .default(null)
+  .transform((v) => (v && v.trim() && v.trim().toLowerCase() !== 'null' ? v.trim() : null))
+
+const AmountSchema = z.union([z.string(), z.number()]).transform(String).pipe(z.string().trim().min(1))
 const text = z.string().trim().min(1)
 
 const SuggestionSchema = z.object({
@@ -28,6 +36,33 @@ const SuggestionSchema = z.object({
   emoji: EmojiSchema,
 })
 const SuggestResponseSchema = z.object({ suggestions: z.array(SuggestionSchema).min(1).max(6) })
+
+const RecipeIngredientSchema = z.object({
+  name: text,
+  amount: AmountSchema,
+  swaps: z.array(z.any()).catch([]),
+})
+
+const RecipeStepSchema = z.object({
+  title: text,
+  instruction: text,
+  duration: NullableText,
+  tip: NullableText,
+})
+
+const RecipeSchema = z.object({
+  title: text,
+  emoji: EmojiSchema,
+  description: text,
+  cuisine: text,
+  prepTime: text,
+  cookTime: text,
+  servings: z.coerce.number().int().min(1).max(20),
+  difficulty: DifficultySchema,
+  ingredients: z.array(RecipeIngredientSchema).min(1).max(40),
+  steps: z.array(RecipeStepSchema).min(MIN_STEPS).max(MAX_STEPS),
+})
+const RecipeResponseSchema = z.object({ recipe: RecipeSchema })
 
 function parseWith(schema, data, label) {
   if (!data) return { success: false, error: 'No data received from server.', code: 'NULL_RESPONSE' }
@@ -41,6 +76,7 @@ function parseWith(schema, data, label) {
   }
 }
 export const parseSuggest = (data) => parseWith(SuggestResponseSchema, data, 'dish')
+export const parseRecipe = (data) => parseWith(RecipeResponseSchema, data, 'recipe')
 
 export const newRequestId = () =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
