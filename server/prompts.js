@@ -1,4 +1,4 @@
-﻿import { SUGGESTION_COUNT, MAX_INGREDIENTS, MIN_STEPS, MAX_STEPS } from '../shared/constants.js'
+import { SUGGESTION_COUNT, MAX_INGREDIENTS, MIN_STEPS, MAX_STEPS } from '../shared/constants.js'
 import { LLMError } from './groq.js'
 
 const bad = (message) => new LLMError('INVALID_INPUT', 400, message)
@@ -96,6 +96,39 @@ ${recipeRules}
 
 Dish to cook: ${dish}
 ${about ? `About the dish: ${about}\n` : ''}Available ingredients: ${list.join(', ')}
+
+Return exactly this structure with real values (the arrays hold one example item; write all of them):
+${JSON.stringify(recipeExample, null, 2)}`
+}
+
+/**
+ * 3) POST /api/swap  { dishName, servings, ingredients: [{ name, amount }], changes: [{ from, to }] }  ->  { recipe }
+ * The cook picked substitutes: the model rewrites the WHOLE recipe (ingredients, amounts, steps) around them.
+ */
+export function swapPrompt({ dishName, servings, ingredients, changes }) {
+  const dish = cleanText(dishName, 100)
+  if (!dish) throw bad('dishName is required')
+  if (!Array.isArray(ingredients) || !ingredients.length || ingredients.length > 40) throw bad('ingredients must be a non-empty array')
+  const items = ingredients
+    .map((i) => ({ name: cleanText(i?.name, 50), amount: cleanText(i?.amount, 30) }))
+    .filter((i) => i.name)
+  if (!items.length) throw bad('No valid ingredients provided')
+  const done = (Array.isArray(changes) ? changes.slice(0, 40) : [])
+    .map((c) => `${cleanText(c?.from, 50)} -> ${cleanText(c?.to, 50)}`)
+    .filter((c) => c.length > 4)
+  if (!done.length) throw bad('changes must list at least one swap')
+
+  return `${RULES}
+${recipeRules}
+- The cook replaced some ingredients of this recipe. Write the COMPLETE updated recipe for the new ingredient list.
+- Every replaced ingredient must be used in the steps instead of the old one. Adjust amounts, timings and method where the new ingredient needs it.
+- Keep the same dish, same servings (${Number(servings) || 2}) and the same overall style. Do not mention the old ingredients.
+- The swaps in the new recipe are options for the NEW ingredient list and must not repeat the ingredient itself.
+
+Dish: ${dish}
+Swaps made: ${done.join('; ')}
+New ingredient list:
+${items.map((i) => `${i.name} (${i.amount})`).join('\n')}
 
 Return exactly this structure with real values (the arrays hold one example item; write all of them):
 ${JSON.stringify(recipeExample, null, 2)}`

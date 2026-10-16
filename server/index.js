@@ -1,6 +1,6 @@
-﻿import express from 'express'
+import express from 'express'
 import { generateJSON, modelName, sendError } from './groq.js'
-import { suggestPrompt, recipePrompt } from './prompts.js'
+import { suggestPrompt, recipePrompt, swapPrompt } from './prompts.js'
 
 const app = express()
 app.use(express.json({ limit: '50kb' }))
@@ -21,6 +21,7 @@ const llm = (buildPrompt, opts) => async (req, res) => {
 
 app.post('/api/suggest', llm(suggestPrompt, { maxTokens: 1200, timeoutMs: 15000 }))
 app.post('/api/recipe', llm(recipePrompt, { maxTokens: 6000, timeoutMs: 25000 }))
+app.post('/api/swap', llm(swapPrompt, { maxTokens: 6000, timeoutMs: 25000 }))
 
 // Unknown /api routes and wrong methods answer with JSON too.
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' }))

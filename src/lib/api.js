@@ -37,11 +37,10 @@ const SuggestionSchema = z.object({
 })
 const SuggestResponseSchema = z.object({ suggestions: z.array(SuggestionSchema).min(1).max(6) })
 
-const RecipeIngredientSchema = z.object({
-  name: text,
-  amount: AmountSchema,
-  swaps: z.array(z.any()).catch([]),
-})
+const SwapOptionSchema = z.object({ name: text.max(60), note: text.max(240) })
+const SwapsSchema = z.array(SwapOptionSchema).max(4).catch([])
+
+const RecipeIngredientSchema = z.object({ name: text, amount: AmountSchema, swaps: SwapsSchema })
 
 const RecipeStepSchema = z.object({
   title: text,

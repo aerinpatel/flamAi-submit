@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { callApi, newRequestId, parseSuggest, parseRecipe } from '../lib/api.js'
 import { MAX_DISHES } from '../../shared/constants.js'
 
@@ -17,23 +17,30 @@ const addDishes = (current, incoming) => {
   return out
 }
 
+/**
+ * useSuggestions: owns the `dishes` array.
+ *   getSuggestions(ingredients)  starts over with the first 2 dishes
+ *   loadMore(ingredients)        appends 2 more (asks the model to skip dishes already shown), up to MAX_DISHES
+ * Every call gets a unique request id: only the answer of the latest id is used, callApi checks the echoed id.
+ */
 function useSuggestions() {
-  const [dishes, setDishes] = useState([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [error, setError] = useState(null)
-  const [moreError, setMoreError] = useState(null)
+  const [dishes, setDishes] = useState(([]))
+  const [isLoading, setIsLoading] = useState(false) // first batch
+  const [isLoadingMore, setIsLoadingMore] = useState(false) // "generate more"
+  const [error, setError] = useState(null) // first batch failed: nothing to show
+  const [moreError, setMoreError] = useState(null) // "generate more" failed: keep the dishes we have
   const latestIdRef = useRef('')
   const controllerRef = useRef(null)
-  const dishesRef = useRef([])
+  const dishesRef = useRef(([])) // latest list, readable inside callbacks
   const busyRef = useRef(false)
 
   const setList = (next) => { dishesRef.current = next; setDishes(next) }
 
   useEffect(() => () => controllerRef.current?.abort(), [])
 
+  /** Shared request. `more` decides which loading / error state is used and whether the list is replaced or extended. */
   const run = async (ingredients, { more }) => {
-    controllerRef.current?.abort()
+    controllerRef.current?.abort() // cancel any older request still in flight
     const requestId = newRequestId()
     latestIdRef.current = requestId
     const controller = new AbortController()
@@ -52,7 +59,7 @@ function useSuggestions() {
       timeoutMs: SUGGEST_TIMEOUT_MS,
       signal: controller.signal,
     })
-    if (latestIdRef.current !== requestId) return
+    if (latestIdRef.current !== requestId) return // a newer request owns the state now
 
     busyRef.current = false
     setIsLoading(false)
@@ -65,6 +72,7 @@ function useSuggestions() {
     }
     const next = addDishes(more ? dishesRef.current : [], result.data.suggestions)
     if (more && next.length === dishesRef.current.length) {
+      // every dish was one we already show
       setMoreError({ message: 'No new dishes this time. Try again.', code: 'NO_NEW_DISHES', retryable: true })
       return
     }
@@ -88,34 +96,54 @@ function useSuggestions() {
   }
 }
 
-const RECIPE_TIMEOUT_MS = 32000
+const RECIPE_TIMEOUT_MS = 32000 // a full recipe takes longer than the dish list
 
+/** Gives every ingredient and step an id built here (never trust the model for ids). */
 const withIds = (r) => ({
   ...r,
   ingredients: r.ingredients.map((x, i) => ({ ...x, id: `ing-${i}` })),
   steps: r.steps.map((x, i) => ({ ...x, id: `step-${i}` })),
 })
 
+/**
+ * useRecipe: the recipe and everything the user does with it.
+ *   fetchRecipe(dish, names)  /api/recipe: first recipe for a dish
+ *   pickSwap / clearSwap      the user chooses a substitute. This ONLY marks it; recipe and steps stay as they are.
+ *   updateRecipe()            /api/swap: the model rewrites the whole recipe around the picked swaps, then it replaces
+ *                             `recipe` (ingredients + steps). While it runs, `isUpdating` is true.
+ * Every call has a unique request id; only the answer of the latest id is used.
+ */
 function useRecipe() {
   const [recipe, setRecipe] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false) // first recipe
   const [error, setError] = useState(null)
   const [completedSteps, setCompletedSteps] = useState(() => new Set())
+  const [picks, setPicks] = useState({}) // ingredient id -> { name, note }
+  const [isUpdating, setIsUpdating] = useState(false) // rewriting after swaps
+  const [updateError, setUpdateError] = useState(null) // rewrite failed: the old recipe stays on screen
   const latestIdRef = useRef('')
   const controllerRef = useRef(null)
 
   useEffect(() => () => controllerRef.current?.abort(), [])
 
-  const fetchRecipe = async (dish, ingredients) => {
+  /** Aborts the previous call and returns the id + signal for the new one. */
+  const startCall = () => {
     controllerRef.current?.abort()
     const requestId = newRequestId()
     latestIdRef.current = requestId
     controllerRef.current = new AbortController()
+    return { requestId, signal: controllerRef.current.signal }
+  }
 
+  const fetchRecipe = async (dish, ingredients) => {
+    const { requestId, signal } = startCall()
     setIsLoading(true)
+    setIsUpdating(false)
     setError(null)
+    setUpdateError(null)
     setRecipe(null)
     setCompletedSteps(new Set())
+    setPicks({})
 
     const result = await callApi({
       url: '/api/recipe',
@@ -123,9 +151,9 @@ function useRecipe() {
       requestId,
       parse: parseRecipe,
       timeoutMs: RECIPE_TIMEOUT_MS,
-      signal: controllerRef.current.signal,
+      signal,
     })
-    if (latestIdRef.current !== requestId) return
+    if (latestIdRef.current !== requestId) return // a newer call owns the state now
 
     setIsLoading(false)
     if (!result.ok) { setError(result.error); return }
@@ -141,14 +169,54 @@ function useRecipe() {
     })
   }
 
-  return { recipe, isLoading, error, completedSteps, toggleStep, fetchRecipe }
+  const pickSwap = (ingredientId, option) => setPicks((p) => ({ ...p, [ingredientId]: option }))
+  const clearSwap = (ingredientId) => setPicks(({ [ingredientId]: _removed, ...rest }) => rest)
+
+  /** Sends the ingredient list with the picked swaps applied; the model returns a new recipe. */
+  const updateRecipe = async (servings) => {
+    const changes = recipe.ingredients.filter((i) => picks[i.id]).map((i) => ({ from: i.name, to: picks[i.id].name }))
+    if (!changes.length) return
+
+    const { requestId, signal } = startCall()
+    setIsUpdating(true)
+    setUpdateError(null)
+
+    const result = await callApi({
+      url: '/api/swap',
+      body: {
+        dishName: recipe.title,
+        servings,
+        ingredients: recipe.ingredients.map((i) => ({ name: picks[i.id]?.name ?? i.name, amount: i.amount })),
+        changes,
+      },
+      requestId,
+      parse: parseRecipe,
+      timeoutMs: RECIPE_TIMEOUT_MS,
+      signal,
+    })
+    if (latestIdRef.current !== requestId) return
+
+    setIsUpdating(false)
+    if (!result.ok) { setUpdateError(result.error); return }
+    setRecipe(withIds(result.data.recipe))
+    setCompletedSteps(new Set()) // the steps are new
+    setPicks({})
+  }
+
+  return { recipe, isLoading, error, completedSteps, toggleStep, fetchRecipe, picks, pickSwap, clearSwap, isUpdating, updateError, updateRecipe }
 }
 
+// Keys describing "what a result was fetched for", so pages never show a result for different input.
 export const suggestionsKey = (names) => names.join('|').toLowerCase()
 export const recipeKeyFor = (dish, names) => [dish.id, dish.name, ...names].join('|').toLowerCase()
 
 const Ctx = createContext(null)
 
+/**
+ * Holds the suggestions + recipe hooks above the router so results survive page changes.
+ * `suggestKey` / `recipeKey` say which input the current result belongs to,
+ * so a page can tell a fresh result from a stale one left over from earlier input.
+ */
 export function RecipeFlowProvider({ children }) {
   const suggestions = useSuggestions()
   const recipe = useRecipe()
@@ -162,7 +230,7 @@ export function RecipeFlowProvider({ children }) {
 
   const loadSuggestions = (names, { force = false } = {}) => {
     const key = suggestionsKey(names)
-    if (!force && key === suggestKeyRef.current) return
+    if (!force && key === suggestKeyRef.current) return // already fetched (or fetching) for this input
     suggestKeyRef.current = key
     setSuggestKey(key)
     getSuggestions(names)
