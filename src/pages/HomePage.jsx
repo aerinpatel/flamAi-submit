@@ -1,12 +1,15 @@
-﻿import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CATEGORIES, IMG } from '../data'
 import { useIngredients } from '../context/IngredientsContext'
 import CategoryCard from '../components/CategoryCard/CategoryCard'
 import IngredientPicker from '../components/IngredientPicker/IngredientPicker'
+import IngredientModal from '../components/IngredientModal/IngredientModal'
 
 export default function HomePage() {
   const { items, toggle, add, removeLast } = useIngredients()
   const navigate = useNavigate()
+  const [openCat, setOpenCat] = useState(null)
 
   return (
     <main className="view">
@@ -27,17 +30,19 @@ export default function HomePage() {
       <section className="sec" id="pick">
         <h2>What's in your kitchen?</h2>
         <p style={{ maxWidth: '56ch', margin: '0 auto 26px', color: 'var(--muted)' }}>
-          Type what you have and press Enter, or choose a category below.
+          Type what you have and press Enter, or tap a suggestion. You can also browse by group below.
         </p>
         <IngredientPicker items={items} onAdd={add} onToggle={toggle} onRemoveLast={removeLast} onFind={() => navigate('/results')} />
 
         <h3 className="or">Or browse by group</h3>
         <div className="grid">
           {CATEGORIES.map((c, k) => (
-            <CategoryCard key={c.name} category={c} count={items.filter((i) => i.cat === k).length} onClick={() => {}} />
+            <CategoryCard key={c.name} category={c} count={items.filter((i) => i.cat === k).length} onClick={() => setOpenCat(k)} />
           ))}
         </div>
       </section>
+
+      <IngredientModal catIndex={openCat} items={items} onToggle={toggle} onAdd={add} onClose={() => setOpenCat(null)} />
     </main>
   )
 }
