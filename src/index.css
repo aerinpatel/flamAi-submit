@@ -1,0 +1,21 @@
+﻿@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+:root {
+  --cream: #f7efdc;
+  --paper: #fffaf0;
+  --orange: #ea4f12;
+  --ink: #1d1d1d;
+  --bg: #fff;
+  --text: #1d1d1d;
+  --muted: #5b574d;
+}
+
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; line-height: 1.5; }
+.wrap { max-width: 1160px; margin: 0 auto; padding: 20px; }
+.hero { background: var(--cream); color: var(--ink); border-radius: 28px; padding: 60px 40px; }
+h1 { font-size: 3.5rem; font-weight: 800; }
+p { font-size: 1.1rem; color: #4a463b; margin-top: 12px; }
+.btn { background: var(--orange); color: #fff; border: 0; padding: 12px 24px; border-radius: 999px; font-weight: 600; cursor: pointer; }
