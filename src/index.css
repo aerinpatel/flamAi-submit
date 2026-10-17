@@ -16,7 +16,6 @@
   --color-body: var(--text);
   --color-muted: var(--muted);
 }
-
 /* Side padding of the full-width headers: 1200px of content, centred. */
 @utility px-hero {
   padding-inline: max(clamp(24px, 6vw, 96px), calc((100% - 1200px) / 2));
