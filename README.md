@@ -1,7 +1,5 @@
 # Cravings.. (fridge-to-recipe)
 
-Cravings turns ingredients in a user's kitchen into dish ideas and interactive recipes. Users can:
-
 - **Live demo:** https://cravings.aerinpatel.me  <!-- update if different -->
 - **Screen recording:** https://www.youtube.com/watch?v=mfXfYhh66Nc
 
@@ -15,21 +13,6 @@ Cravings turns ingredients in a user's kitchen into dish ideas and interactive r
 - **Backend:** Node.js + Express (a small API; on Vercel it runs as a serverless function)
 - **AI:** Groq API, model `openai/gpt-oss-120b` (configurable with `GROQ_MODEL`)
 - **Validation:** Zod
-
-## Time spent
-
-About 8 hours in total.
-
-| Area | Time | What I did |
-| --- | --- | --- |
-| Planning and setup | 0.5 h | Chose fridge-to-recipe, defined the data shapes, set up Vite, Express and Tailwind |
-| Prompts and server | 1.5 h | Wrote the three prompts, the Groq client, timeouts and error-code mapping |
-| Validation and error handling | 2 h | Zod schemas, `callApi` (one retry for bad output), error codes |
-| Core UI | 2 h | Ingredient input, category cards, dish cards, recipe page with steps, servings and swaps |
-| Loading, error and empty states | 0.5 h | State components and retry flows |
-| Responsive layout and polish | 0.75 h | Mobile layout, dark mode, About page, footer |
-| Deploy, README and recording | 0.75 h | Vercel setup, domain, README, screen recording |
-| **Total** | **8 h** | |
 
 ## Running locally
 
@@ -114,6 +97,17 @@ The first suggestion or recipe failure produces an error state because there is 
 
 Changing servings does not call the AI. `IngredientList` scales numeric values in amount strings locally and leaves values such as “to taste” unchanged. The AI is called again only when the user requests a recipe rewrite through ingredient swaps.
 
+## API routes
+
+| Route | Input purpose | Output |
+| --- | --- | --- |
+| `GET /api/health` | Check API configuration | `{ ok, hasKey, model }` |
+| `POST /api/suggest` | Ingredient names and optional excluded dish names | `{ suggestions: [...] }` |
+| `POST /api/recipe` | Selected dish and available ingredients | `{ recipe: {...} }` |
+| `POST /api/swap` | Dish, serving count, updated ingredients, and requested swaps | `{ recipe: {...} }` |
+
+The API accepts JSON request bodies up to 50 KB. Invalid request input, unknown API routes, model errors, timeouts, and malformed responses are returned as JSON with a stable `code`.
+
 ## Validation and failure protection
 
 ```text
@@ -159,15 +153,18 @@ Groq with openai/gpt-oss-120b is used for recipe generation at runtime via two s
 - Add streaming or progress feedback for long recipe requests.
 - Allow users to refine an existing recipe with a follow-up instruction.
 
-## API routes
+## Time spent
 
-| Route | Input purpose | Output |
+About 8 hours in total.
+
+| Area | Time | What I did |
 | --- | --- | --- |
-| `GET /api/health` | Check API configuration | `{ ok, hasKey, model }` |
-| `POST /api/suggest` | Ingredient names and optional excluded dish names | `{ suggestions: [...] }` |
-| `POST /api/recipe` | Selected dish and available ingredients | `{ recipe: {...} }` |
-| `POST /api/swap` | Dish, serving count, updated ingredients, and requested swaps | `{ recipe: {...} }` |
-
-The API accepts JSON request bodies up to 50 KB. Invalid request input, unknown API routes, model errors, timeouts, and malformed responses are returned as JSON with a stable `code`.
-
+| Planning and setup | 0.5 h | Chose fridge-to-recipe, defined the data shapes, set up Vite, Express and Tailwind |
+| Prompts and server | 1.5 h | Wrote the three prompts, the Groq client, timeouts and error-code mapping |
+| Validation and error handling | 2 h | Zod schemas, `callApi` (one retry for bad output), error codes |
+| Core UI | 2 h | Ingredient input, category cards, dish cards, recipe page with steps, servings and swaps |
+| Loading, error and empty states | 0.5 h | State components and retry flows |
+| Responsive layout and polish | 0.75 h | Mobile layout, dark mode, About page, footer |
+| Deploy, README and recording | 0.75 h | Vercel setup, domain, README, screen recording |
+| **Total** | **8 h** | |
 
