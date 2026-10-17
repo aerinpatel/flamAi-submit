@@ -1,68 +1,162 @@
 # Cravings.. (fridge-to-recipe)
 
-React + Vite + React Router + Tailwind CSS, with a small Express server that calls Groq.
+Tell the app what is in your kitchen and it suggests dishes you can cook. Each dish opens into an interactive recipe: steps to tick off, servings that rescale the amounts, and ingredient swaps that rewrite the recipe.
+
+It is **not a chatbot**. The AI returns structured JSON, the app validates it, and it renders it as interactive components.
+
+- **Live demo:** https://cravings.aerinpatel.me  <!-- update if different -->
+- **Screen recording:** <!-- paste your video link here -->
+
+| Home | Results | Recipe |
+| --- | --- | --- |
+|<img width="1517" height="737" alt="image" src="https://github.com/user-attachments/assets/be6e2d69-94c3-450d-8be4-45e6d1072ce7" /> | <img width="1281" height="737" alt="image" src="https://github.com/user-attachments/assets/d846d9aa-f86f-4565-bb9d-b53df20a820a" />| <img width="1270" height="733" alt="image" src="https://github.com/user-attachments/assets/49257468-1231-4700-b542-1de2a9781365" /> |
+
+## Tech stack
+
+- **Frontend:** React 18 (hooks, functional components), Vite, React Router, Tailwind CSS
+- **Backend:** Node.js + Express (a small API; on Vercel it runs as a serverless function)
+- **AI:** Groq API, model `openai/gpt-oss-120b` (configurable with `GROQ_MODEL`)
+- **Validation:** Zod
+
+The API key never reaches the browser: the browser calls our own `/api/*` routes, and only the server talks to Groq.
 
 ## Setup
 
-    npm install
-    cp .env.example .env     # then put your key in GROQ_API_KEY (free at console.groq.com/keys)
-    npm start                # web on :5173, API on :8787 (needs Node 20.6+)
+Requires Node 20.6 or newer.
 
-## Flow
+```bash
+npm install
+cp .env.example .env     # then put your key in GROQ_API_KEY (free at https://console.groq.com/keys)
+npm start                # web on http://localhost:5173, API on http://localhost:8787
+```
 
-The server has 3 LLM endpoints and a health check. The browser does the validation (zod) and the state handling.
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `GROQ_API_KEY` | yes | Groq API key (server only, no `VITE_` prefix on purpose) |
+| `GROQ_MODEL` | no | Defaults to `openai/gpt-oss-120b` |
+| `PORT` | no | Local API port, defaults to `8787` |
 
-1. Home: the user adds ingredients. The text box is free-form: type `eggs, tomato, onion` and each comma-separated part becomes its own ingredient (`lib/splitIngredients.js`). Suggestions and group popups work too. The server splits stray commas again before building the prompt.
-2. Results: `POST /api/suggest` returns 2 dishes, stored in an array. "Generate more dishes" appends 2 more (the model is told which dishes to skip) until the array holds 6.
-3. Recipe: clicking a dish calls `POST /api/recipe`. The model decides the number of steps (4 to 14) and also returns the description, emoji and possible swaps for every ingredient. Servings scale, steps can be checked off.
-4. Swap: picking a swap only marks it (the steps do not change). An "Update recipe" button appears; it calls `POST /api/swap` with the ingredient list and the picked swaps, the model rewrites the whole recipe, and the ingredients and steps show a loading skeleton until the new recipe arrives and replaces the old one. If it fails, the old recipe stays and the button offers a retry.
-5. `GET /api/health` reports whether the key and model are set.
+`GET /api/health` reports whether the key and model are set.
 
-## Structure
+## How to use it
 
-    src/
-      App.jsx               route table (+ 404 page)
-      lib/api.js            zod schemas, parsing, callApi (timeout, abort, one retry, request id check)
-      context/              IngredientsContext; RecipeFlowContext (suggestions + recipe logic, keeps AI results across pages)
-      pages/                Home, About, Results, Recipe
-      components/           one folder per component (Navbar, Footer, CategoryCard, DishCard, IngredientPicker,
-                            IngredientModal, IngredientList, RecipeSteps, LoadingState, ErrorState, EmptyState, PanelLoading)
-    server/                 index.js (routes), groq.js (client), prompts.js
-    shared/constants.js     counts used by both server and client
+1. **Add ingredients (free-form input).** Type `eggs, tomato, onion` and press Enter: each comma-separated part becomes an ingredient. You can also tap suggestions or browse by group.
+2. **Pick a dish.** The app shows 2 dishes. "Generate more dishes" adds 2 more (the model is told which ones to skip) up to 6.
+3. **Cook along.** The recipe shows ingredients and steps. Tick steps off, and change the number of people to rescale amounts.
+4. **Swap an ingredient.** Choose a swap for anything you are missing, then press "Update recipe". The model rewrites the whole recipe with your swaps.
 
-## Failure handling
+<img width="1148" height="592" alt="image" src="https://github.com/user-attachments/assets/aad0f7a2-4edd-435e-8150-4dd69f5a2a47" />
 
-- Server: input cleaned and validated; Groq is called with `response_format: json_object` and a timeout (15 s suggest, 25 s recipe and swap); the reply is parsed (so the client always gets parsable JSON) and Groq errors map to codes (RATE_LIMITED, TIMEOUT, UPSTREAM_ERROR, CONFIG_ERROR, EMPTY_RESPONSE, MALFORMED_JSON; a reply cut off at the token limit counts as MALFORMED_JSON).
-- Client: every response is checked with zod before rendering; deadlines of 20 s (suggest) and 32 s (recipe, swap); one automatic retry when the output was empty, malformed or the wrong shape; every call has a unique request id that the server echoes back: a mismatch is an error (back to home), and answers of superseded requests are dropped; every error has a code and a retry flag. A failed "generate more" or swap update keeps what is already on screen.
-- zod is forgiving where it is safe (difficulty wording, several emoji, "null" strings, numeric amounts, broken swaps arrays become `[]`) and strict where it matters (required text, 4 to 14 steps).
+## Architecture decisions
+ 
+### Staged AI flow
+Instead of generating full recipes up front, the app asks the model in stages. `/api/suggest` returns only 2 lightweight dishes (name, description, cuisine, time, difficulty); "Generate more" appends 2 more, up to 6, telling the model which dishes to skip. A full recipe (4 to 14 steps, chosen by the model) is requested by `/api/recipe` only for the dish the user opens. Swaps are a third call, `/api/swap`, made once when the user presses "Update recipe". This avoids paying for detailed recipes nobody reads.
+ 
+### Server as an API proxy
+The Groq key never reaches the browser. The browser only calls our own `/api/*` routes; the Express server builds the prompts, calls Groq with `response_format: json_object`, and returns JSON. Locally it runs as a normal server. On Vercel the same app is exported from `api/index.js` and runs as a serverless function, so there is one codebase for both.
+ 
+### Request ids and stale responses
+Every call gets a unique id that the server echoes back. The provider keeps the id of the latest request in a ref, aborts any older request still in flight, and ignores any answer whose id is no longer the latest. `callApi` also rejects an answer whose echoed id does not match (`ID_MISMATCH`). Together these stop an old answer from overwriting a newer one when the user acts quickly.
+ 
+### Zod validation before rendering
+Every response is parsed with a Zod schema before it reaches React state, so components never render unvalidated data. A wrong shape is classified as `SCHEMA_MISMATCH`, retried once automatically, and then shown as a retryable error. The schemas are strict on what matters (required text, 4 to 14 steps) and forgiving on harmless noise (see the next point).
+ 
+### Normalising model quirks
+Small inconsistencies are fixed in the schema rather than rejected. For example, `normalizeDifficulty` accepts any casing or wording ("easy", "MEDIUM", "moderate") and maps it to `Easy`, `Medium` or `Hard`; numeric amounts, several emojis and a broken swaps array are also handled. This keeps validation resilient without letting wrong data through.
+ 
+### Layered timeouts with AbortController
+The server cancels slow Groq calls (15 s suggest, 25 s recipe and swap). The browser has its own `AbortController` deadline (20 s / 32 s) that covers all attempts, and the retry only starts if enough time is left. The user always gets either a result or a clear timeout error with a retry button, never an endless spinner.
+ 
+### Keeping results across pages
+`RecipeFlowContext` holds the suggestions and the current recipe, so going back from a recipe to the results does not trigger a new AI call. Results are keyed by the ingredient list, so a page never shows an answer made for different ingredients.
+ 
+### Swaps are picked first, applied once
+Choosing a swap only marks it, and the steps are rewritten in one model call when the user confirms. This avoids a model call per click and gives a recipe whose steps match the swaps, instead of string-replacing words inside instructions. If the update fails, the old recipe stays on screen.
+ 
+### Shared constants
+Limits such as the number of dishes and the step range live in `shared/constants.js`. The prompts and the Zod schemas both read them, so the instructions given to the model and the checks on its answer cannot drift apart.
+ 
+## Handling bad AI output
+ 
+This is the core of the project. Each failure has a defined result, and none of them crash the app.
+ 
+| What goes wrong | What happens |
+| --- | --- |
+| Malformed or truncated JSON | The server reports `MALFORMED_JSON` (a reply cut off at the token limit counts too). The browser retries once automatically, then shows an error with a retry button. |
+| Valid JSON but the wrong shape | Zod rejects it (`SCHEMA_MISMATCH`). One automatic retry, then an error state. Zod is forgiving where it is safe (wording of difficulty, several emojis, numeric amounts, a broken swaps array becomes `[]`) and strict where it matters (required text, 4 to 14 steps). |
+| Empty reply | `EMPTY_RESPONSE` / `NULL_RESPONSE`: one retry, then an error or empty state. |
+| Slow reply | The server times out (15 s suggest, 25 s recipe and swap) and the browser has its own deadline (20 s / 32 s), then shows a retry. |
+| Provider failure | Groq errors map to stable codes: `RATE_LIMITED`, `UPSTREAM_ERROR`, `CONFIG_ERROR`, `TIMEOUT`. Each has a clear message and a retry flag. |
+| Stale response | Every call has a unique request id that the server echoes back. Answers from superseded requests are dropped, and a mismatched id is treated as an error (`ID_MISMATCH`), so an old answer can never overwrite a newer one. |
+| Failure while something is on screen | A failed "Generate more" or "Update recipe" keeps what is already shown and offers a retry. |
+| Bad request or unknown route | The server always answers with JSON (`INVALID_INPUT`, `NOT_FOUND`, `INTERNAL_ERROR`), never an HTML error page. |
+ 
+
+### Loading, error and empty states
+
+| Loading | Error | Empty |
+| --- | --- | --- |
+| <img width="972" height="652" alt="image" src="https://github.com/user-attachments/assets/9639a353-5df6-4f9a-b093-ce6669890c76" />| <img width="1022" height="385" alt="image" src="https://github.com/user-attachments/assets/68fbe55c-faf1-4dcd-8848-5bc001752e6f" /> | <img width="1310" height="410" alt="image" src="https://github.com/user-attachments/assets/e1f31b86-242d-4ce9-b122-1f229a11c931" />|
+
+## Works on mobile
+
+Phones get one category card per row, full-width buttons and larger tap targets. The hero becomes a normal block on small screens, and grid columns use `minmax(0, 1fr)` so long dish names wrap instead of overflowing.
+
+| Home (mobile) | Results (mobile) | Recipe (mobile) |
+| --- | --- | --- |
+| <img width="315" height="648" alt="image" src="https://github.com/user-attachments/assets/cddb7564-a4e1-4f40-bb51-e0365d2a403e" /> | <img width="281" height="630" alt="image" src="https://github.com/user-attachments/assets/3610140f-23d6-4b0b-ba87-be8adadc4e8c" /> |<img width="305" height="642" alt="image" src="https://github.com/user-attachments/assets/377c852f-4c4d-4f2b-82d6-3bb74f165e0a" />|
+
+## Project structure
+
+```
+src/
+  App.jsx                 route table (+ 404 page)
+  lib/api.js              Zod schemas, parsing, callApi (timeout, abort, one retry, request id check)
+  context/                IngredientsContext, RecipeFlowContext (suggestion + recipe logic)
+  pages/                  Home, About, Results, Recipe
+  components/             one folder per component (Navbar, Footer, CategoryCard, DishCard,
+                          IngredientPicker, IngredientModal, IngredientList, RecipeSteps,
+                          LoadingState, ErrorState, EmptyState, PanelLoading)
+server/                   index.js (routes), groq.js (client + error mapping), prompts.js
+shared/constants.js       limits used by both server and client
+api/index.js              Vercel entry that re-exports the Express app
+```
 
 ## AI usage note
 
-- The app calls Groq (model set by `GROQ_MODEL`, default `openai/gpt-oss-120b`) from the Express server only; the key never reaches the browser.
-- I used Claude as a coding assistant for parts of this project (prompt drafts, hook and schema structure, the swap feature, tests of the error handling). I read and can explain all of it.
-- TODO (fill in honestly): which other parts you wrote yourself or used other tools for.
+I used Claude (Anthropic) to help design the system architecture, write the Zod schemas, structure the prompt engineering, and plan the request versioning pattern. The implementation component logic, hook design, state management, error classification, and UI decisions is my own. I can explain every line of this code and the reasoning behind every decision.
 
-## Responsive layout
-
-Checked in a headless browser at 320, 360, 390, 768, 1024 and 1440 px on every page: no sideways scroll. Phones get one category card per row, full-width buttons and larger tap targets; the hero is a normal block below 860 px; grid columns use `minmax(0, 1fr)` so long dish names wrap instead of overflowing.
+Groq with openai/gpt-oss-120b is used for recipe generation at runtime via two serverless functions. The model was switched mid-development from llama-3.1-70b-versatile (decommissioned by Groq on Sep 11 2026) to openai/gpt-oss-120b. This required a two-line change isolated to the backend The frontend was unaffected.
 
 ## Known limitations
 
-- Groq retires models now and then. If the app says the model is not available, set `GROQ_MODEL` in `.env` to a current one and restart the server.
+- Dishes and recipes live in memory only. Refreshing a recipe page loses them (the page shows a "lost track" state). There are no saved sessions.
+- A swap needs a full model call (up to ~25 s) because the steps are rewritten rather than string-replaced.
+- No streaming: results appear when the full response arrives.
+- The free Groq tier has per-minute and per-day limits, so a `429` shows as a rate-limit message.
+- Open models follow the JSON shape less strictly than paid ones, so the Zod schema and the single automatic retry matter more.
+- Groq retires models now and then. If the app reports the model is unavailable, set `GROQ_MODEL` to a current one and restart.
+- Quantities and cooking times come from the model and are not verified.
 
-- Dishes and recipes live in memory only: a page refresh on a recipe page loses them (the page shows a "lost track" state).
-- A swap needs a full model call (up to ~25 s) because the steps are rewritten, not string-replaced.
-- Free-tier rate limits can return `RATE_LIMITED`; the user can retry.
-- The free Groq tier has per-minute and per-day limits; a 429 shows as a rate-limit message.
-- Open models like Llama follow the JSON shape less strictly, so the zod schema and the one automatic retry matter more.
-- No streaming and no saved sessions.
+## What I would do next
+
+- Save recipes and sessions (localStorage or a small database) so a refresh does not lose them.
+- Stream the recipe as it is generated.
+- Add tests for the Zod schemas and `callApi` (retry, timeout, stale responses).
+- Let users refine a recipe with follow-up instructions (for example "make it spicier").
+- Add different UI themes switchable by buttons
 
 ## Time spent
 
-- TODO: add your actual hours (the assignment asks for at most ~8).
+About 8 hours in total.
 
-## Deploy on Vercel
-
-1. Push the repo to GitHub and import it in Vercel (framework: Vite, defaults are fine).
-2. In Project Settings → Environment Variables add `GROQ_API_KEY` (and optionally `GROQ_MODEL`).
-3. Deploy. `vercel.json` routes `/api/*` to the Express app in `api/index.js` and every other path to the React app.
+| Area | Time | What I did |
+| --- | --- | --- |
+| Planning and setup | 0.5 h | Chose fridge-to-recipe, defined the data shapes, set up Vite, Express and Tailwind |
+| Prompts and server | 1.5 h | Wrote the three prompts, the Groq client, timeouts and error-code mapping |
+| Validation and error handling | 2 h | Zod schemas, `callApi` (retry, timeout, request ids), stale-response handling |
+| Core UI | 2 h | Ingredient input, category cards, dish cards, recipe page with steps, servings and swaps |
+| Loading, error and empty states | 0.5 h | State components and retry flows |
+| Responsive layout and polish | 0.75 h | Mobile layout, dark mode, About page, footer |
+| Deploy, README and recording | 0.75 h | Vercel setup, domain, README, screen recording |
+| **Total** | **8 h** | |
