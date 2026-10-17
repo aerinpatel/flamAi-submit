@@ -23,28 +23,36 @@ export default function IngredientModal({ catIndex, items, onToggle, onAdd, onCl
   }
 
   return (
-    <dialog ref={ref} onClose={onClose} aria-labelledby="dt">
-      <div className="mh">
-        <h2 id="dt" style={{ fontSize: '1.7rem' }}>{c.name}</h2>
-        <button className="x" aria-label="Close" onClick={() => ref.current.close()}>&times;</button>
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      aria-labelledby="dt"
+      className="m-auto w-[min(560px,92vw)] rounded-3xl border-2 border-ink bg-paper p-7 text-ink backdrop:bg-[rgba(29,29,29,.55)] max-[600px]:p-5"
+    >
+      <div className="mb-4 flex items-center justify-between">
+        <h2 id="dt" className="text-[1.7rem]">{c.name}</h2>
+        <button className="size-[38px] cursor-pointer rounded-full border-2 border-ink bg-transparent text-[1.1rem] text-ink max-[600px]:size-11" aria-label="Close" onClick={() => ref.current.close()}>&times;</button>
       </div>
-      <form className="sr" onSubmit={submit}>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Type one or more, separated by commas" autoComplete="off" aria-label="Search ingredient" />
-        <button className="btn" type="submit">Add</button>
+      <form className="mb-[18px] flex gap-2.5 max-[600px]:flex-wrap" onSubmit={submit}>
+        <input
+          className="min-w-0 flex-1 rounded-full border-2 border-ink bg-white px-[18px] py-3 text-ink max-[600px]:basis-full"
+          value={q} onChange={(e) => setQ(e.target.value)} placeholder="Type one or more, separated by commas" autoComplete="off" aria-label="Search ingredient"
+        />
+        <button className="btn max-[600px]:flex-1" type="submit">Add</button>
       </form>
-      <div className="sub">Quick picks</div>
-      <div className="chips">
+      <div className="mt-3.5 mb-2 font-semibold">Quick picks</div>
+      <div className="flex flex-wrap gap-2">
         {c.options.map((o) => (
           <button key={o} className={'chip' + (names.includes(o) ? ' sel' : '')} onClick={() => onToggle(o, cat)}>{o}</button>
         ))}
       </div>
-      <div className="sub">Added from this group</div>
-      <div className="chips">
+      <div className="mt-3.5 mb-2 font-semibold">Added from this group</div>
+      <div className="flex flex-wrap gap-2">
         {mine.length ? mine.map((i) => (
           <button key={i.name} className="chip sel" onClick={() => onToggle(i.name, cat)}>{i.name} &times;</button>
-        )) : <span className="empty">Nothing yet</span>}
+        )) : <span className="text-[.95rem] text-soft">Nothing yet</span>}
       </div>
-      <div className="mf"><button className="btn" onClick={() => ref.current.close()}>Done</button></div>
+      <div className="mt-[22px] flex justify-end"><button className="btn" onClick={() => ref.current.close()}>Done</button></div>
     </dialog>
   )
 }

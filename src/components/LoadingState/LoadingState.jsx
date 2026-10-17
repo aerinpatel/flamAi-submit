@@ -7,7 +7,7 @@ export default function LoadingState({ title, hint, skeletons = 0 }) {
         <p>{hint}</p>
       </div>
       {skeletons > 0 && (
-        <div className="two" style={{ marginTop: 24 }} aria-hidden="true">
+        <div className="mt-6 grid grid-cols-[repeat(2,minmax(0,1fr))] gap-6 max-[860px]:grid-cols-[minmax(0,1fr)]" aria-hidden="true">
           {Array.from({ length: skeletons }, (_, i) => <div key={i} className="skel" />)}
         </div>
       )}

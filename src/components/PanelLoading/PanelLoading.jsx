@@ -3,9 +3,9 @@ export default function PanelLoading({ text }) {
   return (
     <div role="status" aria-live="polite">
       <p>{text}</p>
-      <div className="skel" style={{ minHeight: 70, marginBottom: 12 }} />
-      <div className="skel" style={{ minHeight: 70, marginBottom: 12 }} />
-      <div className="skel" style={{ minHeight: 70 }} />
+      <div className="skel mb-3 min-h-[70px]" />
+      <div className="skel mb-3 min-h-[70px]" />
+      <div className="skel min-h-[70px]" />
     </div>
   )
 }

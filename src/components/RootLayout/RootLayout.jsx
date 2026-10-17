@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
-import { IngredientsProvider } from '../context/IngredientsContext'
-import { RecipeFlowProvider } from '../context/RecipeFlowContext'
-import Navbar from '../components/Navbar/Navbar'
-import Footer from '../components/Footer/Footer'
+import { IngredientsProvider } from '../../hooks/useIngredients'
+import { RecipeFlowProvider } from '../../hooks/useRecipeFlow'
+import Navbar from '../Navbar/Navbar'
+import Footer from '../Footer/Footer'
 
 export default function RootLayout() {
   const { pathname } = useLocation()
@@ -12,7 +12,7 @@ export default function RootLayout() {
   return (
     <IngredientsProvider>
       <RecipeFlowProvider>
-        <div className="wrap">
+        <div className="relative">
           <Navbar />
           <Outlet />
           <Footer />

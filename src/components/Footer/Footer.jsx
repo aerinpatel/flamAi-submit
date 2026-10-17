@@ -2,9 +2,9 @@ import { AUTHOR } from '../../data'
 
 export default function Footer() {
   return (
-    <footer>
+    <footer className="px-5 py-[30px] text-center text-[.9rem] text-muted">
       © Cravings.. · Built by {AUTHOR.name} ·{' '}
-      <a href={AUTHOR.github} target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a className="font-semibold text-orange no-underline hover:underline" href={AUTHOR.github} target="_blank" rel="noopener noreferrer">GitHub</a>
     </footer>
   )
 }

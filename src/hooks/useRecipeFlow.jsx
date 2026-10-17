@@ -1,14 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { callApi, newRequestId, parseSuggest, parseRecipe } from '../lib/api.js'
-import { MAX_DISHES } from '../../shared/constants.js'
-
-const SUGGEST_TIMEOUT_MS = 20000
+import { createContext, useContext, useRef, useState } from 'react'
+import { callApi } from '../lib/api.js'
+import { parseSuggest, parseRecipe } from '../lib/schemas.js'
 
 const addDishes = (current, incoming) => {
   const seen = new Set(current.map((d) => d.name.trim().toLowerCase()))
   const out = [...current]
   for (const dish of incoming) {
-    if (out.length >= MAX_DISHES) break
+    if (out.length >= 6) break
     const key = dish.name.trim().toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
@@ -20,83 +18,51 @@ const addDishes = (current, incoming) => {
 /**
  * useSuggestions: owns the `dishes` array.
  *   getSuggestions(ingredients)  starts over with the first 2 dishes
- *   loadMore(ingredients)        appends 2 more (asks the model to skip dishes already shown), up to MAX_DISHES
- * Every call gets a unique request id: only the answer of the latest id is used, callApi checks the echoed id.
+ *   loadMore(ingredients)        appends 2 more (asks the model to skip dishes already shown), up to 6 dishes
  */
 function useSuggestions() {
-  const [dishes, setDishes] = useState(([]))
+  const [dishes, setDishes] = useState([])
   const [isLoading, setIsLoading] = useState(false) // first batch
   const [isLoadingMore, setIsLoadingMore] = useState(false) // "generate more"
   const [error, setError] = useState(null) // first batch failed: nothing to show
   const [moreError, setMoreError] = useState(null) // "generate more" failed: keep the dishes we have
-  const latestIdRef = useRef('')
-  const controllerRef = useRef(null)
-  const dishesRef = useRef(([])) // latest list, readable inside callbacks
-  const busyRef = useRef(false)
 
-  const setList = (next) => { dishesRef.current = next; setDishes(next) }
+  const getSuggestions = async (ingredients) => {
+    setDishes([])
+    setIsLoading(true)
+    setError(null)
+    setMoreError(null)
 
-  useEffect(() => () => controllerRef.current?.abort(), [])
+    const result = await callApi({ url: '/api/suggest', body: { ingredients, exclude: [] }, parse: parseSuggest })
 
-  /** Shared request. `more` decides which loading / error state is used and whether the list is replaced or extended. */
-  const run = async (ingredients, { more }) => {
-    controllerRef.current?.abort() // cancel any older request still in flight
-    const requestId = newRequestId()
-    latestIdRef.current = requestId
-    const controller = new AbortController()
-    controllerRef.current = controller
-    busyRef.current = true
-
-    if (more) { setIsLoadingMore(true); setMoreError(null) }
-    else { setList([]); setIsLoading(true); setIsLoadingMore(false); setError(null); setMoreError(null) }
-
-    const exclude = more ? dishesRef.current.map((d) => d.name) : []
-    const result = await callApi({
-      url: '/api/suggest',
-      body: { ingredients, exclude },
-      requestId,
-      parse: parseSuggest,
-      timeoutMs: SUGGEST_TIMEOUT_MS,
-      signal: controller.signal,
-    })
-    if (latestIdRef.current !== requestId) return // a newer request owns the state now
-
-    busyRef.current = false
     setIsLoading(false)
-    setIsLoadingMore(false)
+    if (!result.ok) { setError(result.error); return }
+    setDishes(addDishes([], result.data.suggestions))
+  }
 
-    if (!result.ok) {
-      if (more) setMoreError(result.error)
-      else setError(result.error)
-      return
-    }
-    const next = addDishes(more ? dishesRef.current : [], result.data.suggestions)
-    if (more && next.length === dishesRef.current.length) {
+  const loadMore = async (ingredients) => {
+    setIsLoadingMore(true)
+    setMoreError(null)
+
+    const result = await callApi({ url: '/api/suggest', body: { ingredients, exclude: dishes.map((d) => d.name) }, parse: parseSuggest })
+
+    setIsLoadingMore(false)
+    if (!result.ok) { setMoreError(result.error); return }
+    const next = addDishes(dishes, result.data.suggestions)
+    if (next.length === dishes.length) {
       // every dish was one we already show
       setMoreError({ message: 'No new dishes this time. Try again.', code: 'NO_NEW_DISHES', retryable: true })
       return
     }
-    setList(next)
-  }
-
-  const getSuggestions = (ingredients) => {
-    if (!ingredients.length) return
-    return run(ingredients, { more: false })
-  }
-
-  const loadMore = (ingredients) => {
-    if (!ingredients.length || busyRef.current || dishesRef.current.length >= MAX_DISHES) return
-    return run(ingredients, { more: true })
+    setDishes(next)
   }
 
   return {
     dishes, isLoading, isLoadingMore, error, moreError,
-    canLoadMore: dishes.length > 0 && dishes.length < MAX_DISHES,
+    canLoadMore: dishes.length > 0 && dishes.length < 6,
     getSuggestions, loadMore,
   }
 }
-
-const RECIPE_TIMEOUT_MS = 32000 // a full recipe takes longer than the dish list
 
 /** Gives every ingredient and step an id built here (never trust the model for ids). */
 const withIds = (r) => ({
@@ -111,7 +77,6 @@ const withIds = (r) => ({
  *   pickSwap / clearSwap      the user chooses a substitute. This ONLY marks it; recipe and steps stay as they are.
  *   updateRecipe()            /api/swap: the model rewrites the whole recipe around the picked swaps, then it replaces
  *                             `recipe` (ingredients + steps). While it runs, `isUpdating` is true.
- * Every call has a unique request id; only the answer of the latest id is used.
  */
 function useRecipe() {
   const [recipe, setRecipe] = useState(null)
@@ -121,22 +86,8 @@ function useRecipe() {
   const [picks, setPicks] = useState({}) // ingredient id -> { name, note }
   const [isUpdating, setIsUpdating] = useState(false) // rewriting after swaps
   const [updateError, setUpdateError] = useState(null) // rewrite failed: the old recipe stays on screen
-  const latestIdRef = useRef('')
-  const controllerRef = useRef(null)
-
-  useEffect(() => () => controllerRef.current?.abort(), [])
-
-  /** Aborts the previous call and returns the id + signal for the new one. */
-  const startCall = () => {
-    controllerRef.current?.abort()
-    const requestId = newRequestId()
-    latestIdRef.current = requestId
-    controllerRef.current = new AbortController()
-    return { requestId, signal: controllerRef.current.signal }
-  }
 
   const fetchRecipe = async (dish, ingredients) => {
-    const { requestId, signal } = startCall()
     setIsLoading(true)
     setIsUpdating(false)
     setError(null)
@@ -148,12 +99,8 @@ function useRecipe() {
     const result = await callApi({
       url: '/api/recipe',
       body: { dishName: dish.name, description: dish.description, ingredients },
-      requestId,
       parse: parseRecipe,
-      timeoutMs: RECIPE_TIMEOUT_MS,
-      signal,
     })
-    if (latestIdRef.current !== requestId) return // a newer call owns the state now
 
     setIsLoading(false)
     if (!result.ok) { setError(result.error); return }
@@ -177,7 +124,6 @@ function useRecipe() {
     const changes = recipe.ingredients.filter((i) => picks[i.id]).map((i) => ({ from: i.name, to: picks[i.id].name }))
     if (!changes.length) return
 
-    const { requestId, signal } = startCall()
     setIsUpdating(true)
     setUpdateError(null)
 
@@ -189,12 +135,8 @@ function useRecipe() {
         ingredients: recipe.ingredients.map((i) => ({ name: picks[i.id]?.name ?? i.name, amount: i.amount })),
         changes,
       },
-      requestId,
       parse: parseRecipe,
-      timeoutMs: RECIPE_TIMEOUT_MS,
-      signal,
     })
-    if (latestIdRef.current !== requestId) return
 
     setIsUpdating(false)
     if (!result.ok) { setUpdateError(result.error); return }

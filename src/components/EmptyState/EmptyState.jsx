@@ -5,7 +5,7 @@ export default function EmptyState({ title, text, to = '/', label = 'Add ingredi
     <div className="state">
       <h3>{title}</h3>
       <p>{text}</p>
-      <div className="acts"><Link className="btn" to={to}>{label}</Link></div>
+      <div className="mt-2 flex flex-wrap justify-center gap-3"><Link className="btn max-[600px]:w-full max-[600px]:text-center" to={to}>{label}</Link></div>
     </div>
   )
 }

@@ -1,5 +1,5 @@
-import { SUGGESTION_COUNT, MAX_INGREDIENTS, MIN_STEPS, MAX_STEPS } from '../shared/constants.js'
-import { LLMError } from './groq.js'
+import { MAX_INGREDIENTS, MIN_STEPS, MAX_STEPS } from '../src/constants/index.js'
+import { LLMError } from './_groq.js'
 
 const bad = (message) => new LLMError('INVALID_INPUT', 400, message)
 
@@ -33,20 +33,30 @@ export function suggestPrompt({ ingredients, exclude }) {
   const list = cleanList(ingredients, { split: true })
   if (!list.length) throw bad('ingredients must be a non-empty array of strings')
   if (Array.isArray(ingredients) && ingredients.length > MAX_INGREDIENTS) throw bad(`Maximum ${MAX_INGREDIENTS} ingredients allowed`)
-  const seen = cleanList(exclude, { max: 12, len: 80 })
+  const seen = cleanList(exclude, { max: 6, len: 80 })
 
   const example = {
-    suggestions: Array.from({ length: SUGGESTION_COUNT }, (_, i) => ({
-      name: 'name of the dish',
-      description: 'exactly 2 sentences describing the dish appetizingly',
-      cuisine: i === 0 ? 'cuisine such as Italian, Indian, Asian or Mexican' : 'a different cuisine from the other dish',
-      time: 'total time such as 25 mins',
-      difficulty: 'Easy | Medium | Hard',
-      emoji: 'one single food emoji',
-    })),
+    suggestions: [
+      {
+        name: 'name of the first dish',
+        description: 'exactly 2 sentences describing the dish appetizingly',
+        cuisine: 'cuisine such as Italian, Indian, Asian or Mexican',
+        time: 'total time such as 25 mins',
+        difficulty: 'Easy | Medium | Hard',
+        emoji: 'one single food emoji',
+      },
+      {
+        name: 'name of the second dish',
+        description: 'exactly 2 sentences describing the dish appetizingly',
+        cuisine: 'a different cuisine from the first dish',
+        time: 'total time such as 25 mins',
+        difficulty: 'Easy | Medium | Hard',
+        emoji: 'one single food emoji',
+      },
+    ],
   }
   return `${RULES}
-- "suggestions" has EXACTLY ${SUGGESTION_COUNT} items, each from a different cuisine.
+- "suggestions" has EXACTLY 2 items, each from a different cuisine.
 - Dishes must mainly use the ingredients below. Basic pantry items (salt, oil, water, common spices) may be assumed.
 ${seen.length ? `- Do NOT suggest any of these dishes again: ${seen.join(', ')}.\n` : ''}
 Ingredients: ${list.join(', ')}
@@ -108,12 +118,12 @@ ${JSON.stringify(recipeExample, null, 2)}`
 export function swapPrompt({ dishName, servings, ingredients, changes }) {
   const dish = cleanText(dishName, 100)
   if (!dish) throw bad('dishName is required')
-  if (!Array.isArray(ingredients) || !ingredients.length || ingredients.length > 40) throw bad('ingredients must be a non-empty array')
+  if (!Array.isArray(ingredients) || !ingredients.length ) throw bad('ingredients must be a non-empty array')
   const items = ingredients
     .map((i) => ({ name: cleanText(i?.name, 50), amount: cleanText(i?.amount, 30) }))
     .filter((i) => i.name)
   if (!items.length) throw bad('No valid ingredients provided')
-  const done = (Array.isArray(changes) ? changes.slice(0, 40) : [])
+  const done = (Array.isArray(changes) ? changes : [])
     .map((c) => `${cleanText(c?.from, 50)} -> ${cleanText(c?.to, 50)}`)
     .filter((c) => c.length > 4)
   if (!done.length) throw bad('changes must list at least one swap')

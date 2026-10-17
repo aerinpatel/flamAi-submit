@@ -22,11 +22,11 @@ export const IMG = {
   fruits: `${S3}/fruits.png`,
   proteins: `${S3}/protines.png`,
   grains: `${S3}/Grains%26bread.png`,
-  dairy: `${S3}/Dairy%26eggs.png`,
+  dairy: `${S3}/+Dairy%26eggs.png`,
   spices: `${S3}/Spices%26herbs.png`,
 }
 
 // Shown in the footer and the About page. Change these two lines to your own details.
-export const AUTHOR = { name: 'Your Name', github: 'https://github.com/your-username' }
+export const AUTHOR = { name: 'Aerin Patel', github: 'https://github.com/aerinpatel' }
 
 export const TECH = ['React 18', 'Vite', 'React Router', 'Tailwind CSS', 'Node.js + Express', 'Zod', 'Groq API', 'gpt-oss-120b']

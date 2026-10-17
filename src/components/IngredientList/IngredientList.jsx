@@ -34,46 +34,52 @@ function scaleAmount(amount, factor) {
   return amount.replace(NUMBER, (t) => format(toNumber(t) * factor))
 }
 
+const STEP_BTN = 'size-10 cursor-pointer rounded-full border-2 border-ink bg-paper text-[1.2rem] text-ink max-[600px]:size-11'
+
 export default function IngredientList({ recipe, servings, setServings, isUpdating, picks, pickSwap, clearSwap }) {
   const [openId, setOpenId] = useState(null) // ingredient whose swap list is open
   const factor = servings / recipe.servings
 
   return (
     <aside className="pnl">
-      <h3>Ingredients</h3>
-      <div className="step">
+      <h3 className="mb-3">Ingredients</h3>
+      <div className="my-3.5 flex items-center gap-3">
         <span>Serving</span>
-        <button aria-label="Fewer people" onClick={() => setServings((s) => Math.max(1, s - 1))}>&minus;</button>
+        <button className={STEP_BTN} aria-label="Fewer people" onClick={() => setServings((s) => Math.max(1, s - 1))}>&minus;</button>
         <strong>{servings}</strong>
-        <button aria-label="More people" onClick={() => setServings((s) => Math.min(20, s + 1))}>+</button>
+        <button className={STEP_BTN} aria-label="More people" onClick={() => setServings((s) => Math.min(30, s + 1))}>+</button>
         <span>people</span>
       </div>
       {isUpdating ? (
         <PanelLoading text="Updating ingredients…" />
       ) : (
-        <ul className="ing">
+        <ul className="list-none p-0">
           {recipe.ingredients.map((ing) => {
             const pick = picks[ing.id]
             const open = openId === ing.id
             return (
-              <li key={ing.id}>
-                <div className="row">
-                  <span>{ing.name}</span>
-                  <strong>{scaleAmount(ing.amount, factor)}</strong>
+              <li key={ing.id} className="py-[9px] [border-bottom:1px_dashed_var(--color-line)]">
+                <div className="flex justify-between gap-3">
+                  <span className="[overflow-wrap:break-word]">{ing.name}</span>
+                  <strong className="[overflow-wrap:break-word]">{scaleAmount(ing.amount, factor)}</strong>
                 </div>
-                {pick && <small className="swnote">Will swap to {pick.name}. {pick.note}</small>}
-                <div className="swact">
+                {pick && <small className="mt-0.5 block text-[.85rem] text-soft">Will swap to {pick.name}. {pick.note}</small>}
+                <div className="mt-0.5 flex gap-3.5">
                   {pick && <button className="lnk" onClick={() => clearSwap(ing.id)}>Undo swap</button>}
                   <button className="lnk" aria-expanded={open} onClick={() => setOpenId(open ? null : ing.id)}>
                     {open ? 'Hide swaps' : pick ? 'Other swaps' : 'Swap'}
                   </button>
                 </div>
                 {open && (
-                  <div className="swp">
+                  <div className="mt-2 grid gap-2 text-[.9rem]">
                     {ing.swaps.length === 0 && <p>No swaps suggested for this one.</p>}
                     {ing.swaps.map((o) => (
-                      <button key={o.name} className="opt" onClick={() => { pickSwap(ing.id, o); setOpenId(null) }}>
-                        <strong>{o.name}</strong><span>{o.note}</span>
+                      <button
+                        key={o.name}
+                        className="flex cursor-pointer flex-col gap-0.5 rounded-[14px] border-2 border-transparent bg-paper px-3.5 py-2.5 text-left text-ink hover:border-orange focus-visible:border-orange"
+                        onClick={() => { pickSwap(ing.id, o); setOpenId(null) }}
+                      >
+                        <strong>{o.name}</strong><span className="text-[.85rem] text-soft">{o.note}</span>
                       </button>
                     ))}
                   </div>

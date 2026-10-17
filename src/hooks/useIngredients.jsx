@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from 'react'
-import { MAX_INGREDIENTS } from '../../shared/constants'
+import { MAX_INGREDIENTS } from '../constants'
 
 const IngredientsContext = createContext(null)
 

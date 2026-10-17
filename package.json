@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node --env-file=.env server/index.js",
+    "server": "node --env-file=.env api/index.js",
     "start": "concurrently -k -n web,api \"npm:dev\" \"npm:server\"",
     "build": "vite build",
     "preview": "vite preview"
