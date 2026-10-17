@@ -61,12 +61,6 @@ Every call gets a unique id that the server echoes back. The provider keeps the 
 ### Zod validation before rendering
 Every response is parsed with a Zod schema before it reaches React state, so components never render unvalidated data. A wrong shape is classified as `SCHEMA_MISMATCH`, retried once automatically, and then shown as a retryable error. The schemas are strict on what matters (required text, 4 to 14 steps) and forgiving on harmless noise (see the next point).
  
-### Normalising model quirks
-Small inconsistencies are fixed in the schema rather than rejected. For example, `normalizeDifficulty` accepts any casing or wording ("easy", "MEDIUM", "moderate") and maps it to `Easy`, `Medium` or `Hard`; numeric amounts, several emojis and a broken swaps array are also handled. This keeps validation resilient without letting wrong data through.
- 
-### Layered timeouts with AbortController
-The server cancels slow Groq calls (15 s suggest, 25 s recipe and swap). The browser has its own `AbortController` deadline (20 s / 32 s) that covers all attempts, and the retry only starts if enough time is left. The user always gets either a result or a clear timeout error with a retry button, never an endless spinner.
- 
 ### Keeping results across pages
 `RecipeFlowContext` holds the suggestions and the current recipe, so going back from a recipe to the results does not trigger a new AI call. Results are keyed by the ingredient list, so a page never shows an answer made for different ingredients.
  
