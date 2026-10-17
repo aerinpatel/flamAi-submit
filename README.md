@@ -2,8 +2,6 @@
 
 Tell the app what is in your kitchen and it suggests dishes you can cook. Each dish opens into an interactive recipe: steps to tick off, servings that rescale the amounts, and ingredient swaps that rewrite the recipe.
 
-It is **not a chatbot**. The AI returns structured JSON, the app validates it, and it renders it as interactive components.
-
 - **Live demo:** https://cravings.aerinpatel.me  <!-- update if different -->
 - **Screen recording:** <!-- paste your video link here -->
 
@@ -45,42 +43,29 @@ npm start                # web on http://localhost:5173, API on http://localhost
 3. **Cook along.** The recipe shows ingredients and steps. Tick steps off, and change the number of people to rescale amounts.
 4. **Swap an ingredient.** Choose a swap for anything you are missing, then press "Update recipe". The model rewrites the whole recipe with your swaps.
 
+## Swap Ingredients flow
+
 <img width="1148" height="592" alt="image" src="https://github.com/user-attachments/assets/aad0f7a2-4edd-435e-8150-4dd69f5a2a47" />
 
 ## Architecture decisions
  
-### Staged AI flow
-Instead of generating full recipes up front, the app asks the model in stages. `/api/suggest` returns only 2 lightweight dishes (name, description, cuisine, time, difficulty); "Generate more" appends 2 more, up to 6, telling the model which dishes to skip. A full recipe (4 to 14 steps, chosen by the model) is requested by `/api/recipe` only for the dish the user opens. Swaps are a third call, `/api/swap`, made once when the user presses "Update recipe". This avoids paying for detailed recipes nobody reads.
+### 1. Ask the AI in stages instead of all at once
+My first thought was to generate a full recipe for every dish, but that is slow and wasteful, because most people only open one dish. So the first call (`/api/suggest`) returns just two short dish ideas. If the user wants more, "Generate more" asks for two more (and tells the model which ones to skip), up to six. The full recipe is only generated when someone opens a dish. The first screen loads fast, and I only pay for recipes that actually get read.
  
-### Server as an API proxy
-The Groq key never reaches the browser. The browser only calls our own `/api/*` routes; the Express server builds the prompts, calls Groq with `response_format: json_object`, and returns JSON. Locally it runs as a normal server. On Vercel the same app is exported from `api/index.js` and runs as a serverless function, so there is one codebase for both.
+### 2. Keep the API key on the server
+The assignment said not to ship the key in the browser, so the React app never talks to Groq. It only calls my own `/api/*` routes, and a small Express server builds the prompts, calls the model and sends back JSON. I wanted one codebase for both local development and hosting, so the same Express app runs normally on my machine and gets exported as a serverless function on Vercel.
  
-### Zod validation before rendering
-Every response is parsed with a Zod schema (`src/lib/schemas.js`) before it reaches React state, so components never render unvalidated data. A wrong shape is classified as `SCHEMA_MISMATCH`, retried once automatically, and then shown as a retryable error. The schemas are strict on what matters (required text, 4 to 14 steps) and forgiving on harmless noise (see the next point).
+### 3. Never trust the model's output
+Models do not always follow the format, so nothing the AI returns goes straight into the UI. Every response is checked with a Zod schema first, and components only ever receive data that passed. I made the schema strict where it matters (names, steps, the 4 to 14 step range) and forgiving where the mistakes are harmless, such as "easy" vs "Medium" difficulty or a broken swaps list. Rejecting a good recipe over a capital letter would be worse for the user than quietly fixing it.
  
-### Keeping results across pages
-`RecipeFlowContext` holds the suggestions and the current recipe, so going back from a recipe to the results does not trigger a new AI call. Results are keyed by the ingredient list, so a page never shows an answer made for different ingredients.
+### 4. Make failures recoverable, not just visible
+Slow, empty, malformed or rate-limited replies are all things that will happen with a free model. Each failure gets its own error code on the server, the browser retries once on its own, and the server and browser both have timeouts, so the user never stares at an endless spinner. If something fails while a result is already on screen, for example a failed "Generate more", I keep what they already have and just show a retry. The goal was that an AI failure never makes the app lose the user's progress.
  
-### Swaps are picked first, applied once
-Choosing a swap only marks it, and the steps are rewritten in one model call when the user confirms. This avoids a model call per click and gives a recipe whose steps match the swaps, instead of string-replacing words inside instructions. If the update fails, the old recipe stays on screen.
+### 5. Stop old answers from overwriting new ones
+If someone adds an ingredient and searches again while the first request is still running, the slower, older answer could arrive last and replace the newer one. To prevent that, every request gets a unique id, an older request is aborted when a newer one starts, and a response is only used if its id is still the latest. The server also echoes the id back, so a mismatched answer is rejected.
  
-### Shared constants
-Limits such as the number of dishes, the step range, servings and swaps live in `src/constants/index.js`. The prompts, the Zod schemas and the UI all read them, so the instructions given to the model and the checks on its answer cannot drift apart.
- 
-## Handling bad AI output
- 
-This is the core of the project. Each failure has a defined result, and none of them crash the app.
- 
-| What goes wrong | What happens |
-| --- | --- |
-| Malformed or truncated JSON | The server reports `MALFORMED_JSON` (a reply cut off at the token limit counts too). The browser retries once automatically, then shows an error with a retry button. |
-| Valid JSON but the wrong shape | Zod rejects it (`SCHEMA_MISMATCH`). One automatic retry, then an error state. Zod is forgiving where it is safe (wording of difficulty, several emojis, numeric amounts, a broken swaps array becomes `[]`) and strict where it matters (required text, 4 to 14 steps). |
-| Empty reply | `EMPTY_RESPONSE` / `NULL_RESPONSE`: one retry, then an error or empty state. |
-| Slow reply | The server times out (15 s suggest, 25 s recipe and swap), then the browser shows a retry. |
-| Provider failure | Groq errors map to stable codes: `RATE_LIMITED`, `UPSTREAM_ERROR`, `CONFIG_ERROR`, `TIMEOUT`. Each has a clear message and a retry flag. |
-| Failure while something is on screen | A failed "Generate more" or "Update recipe" keeps what is already shown and offers a retry. |
-| Bad request or unknown route | The server always answers with JSON (`INVALID_INPUT`, `NOT_FOUND`, `INTERNAL_ERROR`), never an HTML error page. |
- 
+### 6. Keep the flow state in one place, and apply swaps once
+The suggestions and the current recipe live in a React context, so going back from a recipe to the results does not trigger another AI call. Results are tied to the ingredient list they were made for, so the app never shows an answer for different ingredients. For swaps, clicking only marks the choice, and the recipe is rewritten once when the user presses "Update recipe". Replacing words in the steps myself would break the instructions (cooking times and methods change with the ingredient), so I let the model rewrite the whole recipe in one call. If that call fails, the original recipe stays on screen.
 
 ### Loading, error and empty states
 
@@ -88,32 +73,6 @@ This is the core of the project. Each failure has a defined result, and none of 
 | --- | --- | --- |
 | <img width="972" height="652" alt="image" src="https://github.com/user-attachments/assets/9639a353-5df6-4f9a-b093-ce6669890c76" />| <img width="1022" height="385" alt="image" src="https://github.com/user-attachments/assets/68fbe55c-faf1-4dcd-8848-5bc001752e6f" /> | <img width="1310" height="410" alt="image" src="https://github.com/user-attachments/assets/e1f31b86-242d-4ce9-b122-1f229a11c931" />|
 
-## Works on mobile
-
-Phones get one category card per row, full-width buttons and larger tap targets. The hero becomes a normal block on small screens, and grid columns use `minmax(0, 1fr)` so long dish names wrap instead of overflowing.
-
-| Home (mobile) | Results (mobile) | Recipe (mobile) |
-| --- | --- | --- |
-| <img width="315" height="648" alt="image" src="https://github.com/user-attachments/assets/cddb7564-a4e1-4f40-bb51-e0365d2a403e" /> | <img width="281" height="630" alt="image" src="https://github.com/user-attachments/assets/3610140f-23d6-4b0b-ba87-be8adadc4e8c" /> |<img width="305" height="642" alt="image" src="https://github.com/user-attachments/assets/377c852f-4c4d-4f2b-82d6-3bb74f165e0a" />|
-
-## Project structure
-
-```
-api/
-  index.js                Express app + routes (Vercel serverless entry, also runs locally)
-  _groq.js                Groq client + error mapping
-  _prompts.js             the three prompts + input cleaning
-src/
-  App.jsx                 route table (+ 404 page)
-  components/             one folder per component (Navbar, Footer, RootLayout, CategoryCard, DishCard,
-                          IngredientPicker, IngredientModal, IngredientList, RecipeSteps,
-                          LoadingState, ErrorState, EmptyState, PanelLoading)
-  constants/              limits used by both api and client
-  data/                   static content (categories, images, author, tech)
-  hooks/                  useIngredients, useRecipeFlow (providers + hooks)
-  lib/                    schemas.js (Zod schemas + parsing), api.js (callApi), splitIngredients.js
-  pages/                  Home, About, Results, Recipe
-```
 
 ## AI usage note
 
@@ -134,6 +93,7 @@ Groq with openai/gpt-oss-120b is used for recipe generation at runtime via two s
 ## What I would do next
 
 - Save recipes and sessions (localStorage or a small database) so a refresh does not lose them.
+- Retry on Server itself if the zod validation fail for a set amout of times and only return error if still bad response after retrying
 - Stream the recipe as it is generated.
 - Add tests for the Zod schemas and `callApi` (retry, bad output).
 - Let users refine a recipe with follow-up instructions (for example "make it spicier").

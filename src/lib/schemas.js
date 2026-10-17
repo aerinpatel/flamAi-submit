@@ -44,7 +44,7 @@ const SuggestionSchema = z.object({
   emoji: EmojiSchema,
 })
 /** The hook keeps at most the number of dishes that still fit, so extra items are not an error. */
-const SuggestResponseSchema = z.object({ suggestions: z.array(SuggestionSchema).min(1) })
+const SuggestResponseSchema = z.object({ suggestions: z.array(SuggestionSchema).min(2) })
 
 // ---- swaps (inside every recipe ingredient) --------------------------------------------------
 const SwapOptionSchema = z.object({ name: text.max(60), note: text.max(240) })

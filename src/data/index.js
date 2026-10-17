@@ -1,11 +1,11 @@
 // Static ingredient groups used by the picker and the modal.
 export const CATEGORIES = [
-  { name: 'Vegetables', img: 'vegetables', options: ['Tomato', 'Onion', 'Potato', 'Spinach', 'Carrot', 'Capsicum', 'Garlic', 'Cauliflower', 'Peas', 'Cucumber'] },
-  { name: 'Fruits', img: 'fruits', options: ['Apple', 'Banana', 'Lemon', 'Mango', 'Orange', 'Berries', 'Grapes', 'Pineapple'] },
-  { name: 'Proteins', img: 'proteins', options: ['Chicken', 'Paneer', 'Tofu', 'Fish', 'Lentils', 'Chickpeas', 'Beans', 'Mutton'] },
-  { name: 'Grains & bread', img: 'grains', options: ['Rice', 'Wheat flour', 'Pasta', 'Oats', 'Bread', 'Noodles', 'Semolina'] },
-  { name: 'Dairy & eggs', img: 'dairy', options: ['Milk', 'Eggs', 'Butter', 'Cheese', 'Curd', 'Cream', 'Ghee'] },
-  { name: 'Spices & herbs', img: 'spices', options: ['Cumin', 'Turmeric', 'Chili', 'Basil', 'Coriander', 'Pepper', 'Garam masala'] },
+  { name: 'Vegetables', img: 'vegetables', options: ['Tomato', 'Onion', 'Potato', 'Spinach', 'Carrot', 'Capsicum', 'Garlic', 'Cauliflower', 'Peas', 'Cucumber', 'Broccoli', 'Cabbage', 'Mushrooms', 'Sweet potato', 'Corn', 'Green beans', 'Zucchini', 'Eggplant', 'Beetroot', 'Radish', 'Okra', 'Coconut'] },
+  { name: 'Fruits', img: 'fruits', options: ['Apple', 'Banana', 'Lemon', 'Mango', 'Orange', 'Berries', 'Grapes', 'Pineapple', 'Avocado', 'Papaya', 'Watermelon', 'Pomegranate', 'Peach', 'Pear', 'Kiwi', 'Lime', 'Dates', 'Raisins'] },
+  { name: 'Proteins', img: 'proteins', options: ['Chicken', 'Paneer', 'Tofu', 'Fish', 'Lentils', 'Chickpeas', 'Beans', 'Mutton', 'Beef', 'Prawns', 'Turkey', 'Pork', 'Tempeh', 'Black beans', 'Kidney beans', 'Green lentils', 'Soy chunks', 'Peanuts'] },
+  { name: 'Grains & bread', img: 'grains', options: ['Rice', 'Wheat flour', 'Pasta', 'Oats', 'Bread', 'Noodles', 'Semolina', 'Quinoa', 'Couscous', 'Barley', 'Corn flour', 'Rice flour', 'Tortillas', 'Pita bread', 'Breadcrumbs', 'Rolled oats', 'Millet', 'Brown rice'] },
+  { name: 'Dairy & eggs', img: 'dairy', options: ['Milk', 'Eggs', 'Butter', 'Cheese', 'Curd', 'Cream', 'Ghee', 'Yogurt', 'Coconut milk', 'Cottage cheese', 'Mozzarella', 'Parmesan', 'Sour cream', 'Condensed milk', 'Buttermilk', 'Cream cheese'] },
+  { name: 'Spices & herbs', img: 'spices', options: ['Cumin', 'Turmeric', 'Chili', 'Basil', 'Coriander', 'Pepper', 'Garam masala', 'Paprika', 'Oregano', 'Thyme', 'Rosemary', 'Parsley', 'Mint', 'Ginger', 'Cinnamon', 'Cardamom', 'Cloves', 'Mustard seeds', 'Fennel seeds', 'Curry leaves', 'Soy sauce', 'Vinegar'] },
 ]
 
 export const ALL = CATEGORIES.flatMap((c, cat) => c.options.map((name) => ({ name, cat })))
