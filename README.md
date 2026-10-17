@@ -2,15 +2,8 @@
 
 Cravings turns ingredients in a user's kitchen into dish ideas and interactive recipes. Users can:
 
-- Add ingredients from predefined categories or enter their own.
-- Generate dish suggestions.
-- Open one dish to generate a complete recipe.
-- Mark cooking steps as complete.
-- Change servings and scale numeric ingredient amounts.
-- Select ingredient substitutions and ask the AI to rewrite the complete recipe.
-
 - **Live demo:** https://cravings.aerinpatel.me  <!-- update if different -->
-- **Screen recording:** <!-- paste your video link here -->
+- **Screen recording:** https://www.youtube.com/watch?v=mfXfYhh66Nc
 
 | Home | Results | Recipe |
 | --- | --- | --- |
@@ -141,6 +134,31 @@ User input
 
 The current Zod validation is client-side. The API currently returns parsed JSON before schema validation, so server-side Zod validation is a planned hardening step rather than an implemented guarantee.
 
+## Known limitations
+
+- In-memory React state is lost on refresh, so a pasted recipe URL cannot restore its dish.
+- There is no streaming; each result appears after the complete model response arrives.
+- AI quantities, timings, nutrition, and food-safety guidance are not independently verified.
+- The browser retries malformed or schema-invalid output once.
+- The current API does not validate the final response shape with Zod before returning it.
+- Groq model availability and free-tier rate limits can change.
+- Dish deduplication is based on normalized dish names, not semantic similarity.
+
+## AI usage note
+
+I used Claude (Anthropic) to help design the system architecture, write the Zod schemas, structure the prompt engineering, and plan the request versioning pattern. The implementation — component logic, hook design, state management, error classification, and UI decisions — is my own. I can explain every line of this code and the reasoning behind every decision.
+
+Groq with openai/gpt-oss-120b is used for recipe generation at runtime via two serverless functions. The model was switched mid-development from llama-3.1-70b-versatile (decommissioned by Groq on Sep 11 2026) to openai/gpt-oss-120b. This required a two-line change isolated to the backend — The frontend was unaffected.
+
+## Future improvements
+
+- Validate AI response schemas on the server before returning success.
+- Add focused tests for `callApi`, schemas, prompt cleaning, and state transitions.
+- Add request cancellation or explicit request sequencing for overlapping calls.
+- Persist ingredients, suggestions, and recipes across refreshes.
+- Add streaming or progress feedback for long recipe requests.
+- Allow users to refine an existing recipe with a follow-up instruction.
+
 ## API routes
 
 | Route | Input purpose | Output |
@@ -152,34 +170,4 @@ The current Zod validation is client-side. The API currently returns parsed JSON
 
 The API accepts JSON request bodies up to 50 KB. Invalid request input, unknown API routes, model errors, timeouts, and malformed responses are returned as JSON with a stable `code`.
 
-## Known limitations
 
-- In-memory React state is lost on refresh, so a pasted recipe URL cannot restore its dish.
-- There is no streaming; each result appears after the complete model response arrives.
-- AI quantities, timings, nutrition, and food-safety guidance are not independently verified.
-- The browser retries malformed or schema-invalid output once.
-- The current API does not validate the final response shape with Zod before returning it.
-- Groq model availability and free-tier rate limits can change.
-- Dish deduplication is based on normalized dish names, not semantic similarity.
-
-## Useful files
-
-| File | Responsibility |
-| --- | --- |
-| `src/hooks/useIngredients.jsx` | Shared ingredient state |
-| `src/hooks/useRecipeFlow.jsx` | Suggestions, recipe, swap, and cooking-step state |
-| `src/lib/api.js` | Browser requests, error mapping, and retry |
-| `src/lib/schemas.js` | Zod validation and normalization |
-| `api/index.js` | Express routes and API error responses |
-| `api/_prompts.js` | Input cleaning and prompt construction |
-| `api/_groq.js` | Groq request, JSON parsing, timeout, and provider errors |
-| `src/constants/index.js` | Ingredient, step, token, and timeout limits |
-
-## Future improvements
-
-- Validate AI response schemas on the server before returning success.
-- Add focused tests for `callApi`, schemas, prompt cleaning, and state transitions.
-- Add request cancellation or explicit request sequencing for overlapping calls.
-- Persist ingredients, suggestions, and recipes across refreshes.
-- Add streaming or progress feedback for long recipe requests.
-- Allow users to refine an existing recipe with a follow-up instruction.
